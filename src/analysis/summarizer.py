@@ -1,10 +1,11 @@
 """
-Corpus summarization using Claude.
+Corpus summarization using Claude or Ollama.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from collections import Counter, defaultdict
+from datetime import datetime
 
-import anthropic
 from loguru import logger
 
 from config.settings import settings
@@ -13,21 +14,65 @@ from config.settings import settings
 class CorpusSummarizer:
     """Generates summaries and insights from article corpus."""
 
-    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        use_ollama: Optional[bool] = None,
+    ):
         """
         Initialize summarizer.
 
         Args:
-            api_key: Anthropic API key (defaults to settings)
-            model: Claude model to use (defaults to settings)
+            api_key: Anthropic API key (optional if using Ollama)
+            model: Model to use (defaults to settings)
+            use_ollama: Force Ollama usage. If None, auto-detects based on API key
         """
-        from typing import Optional
+        # Determine whether to use Ollama or Anthropic
+        if use_ollama is None:
+            # Auto-detect: use Ollama if no API key is available
+            self.use_ollama = (
+                not hasattr(settings, "anthropic_api_key")
+                or not settings.anthropic_api_key
+            )
+        else:
+            self.use_ollama = use_ollama
 
-        self.api_key = api_key or settings.anthropic_api_key
-        self.model = model or settings.llm_model
-        self.client = anthropic.Anthropic(api_key=self.api_key)
+        if self.use_ollama:
+            # Use Ollama (free, local)
+            import ollama
 
-        logger.info(f"Initialized CorpusSummarizer with model: {self.model}")
+            self.model = model or getattr(settings, "ollama_model", "llama3.1")
+            self.client = ollama
+            self.api_key = None
+
+            logger.info(f"Initialized CorpusSummarizer with OLLAMA model: {self.model}")
+        else:
+            # Use Anthropic Claude
+            import anthropic
+
+            self.api_key = api_key or settings.anthropic_api_key
+            self.model = model or settings.llm_model
+            self.client = anthropic.Anthropic(api_key=self.api_key)
+
+            logger.info(f"Initialized CorpusSummarizer with CLAUDE model: {self.model}")
+
+    def _call_llm(self, prompt: str, max_tokens: int = 2000) -> str:
+        """Call the configured LLM."""
+        if self.use_ollama:
+            response = self.client.chat(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                options={"num_predict": max_tokens},
+            )
+            return response["message"]["content"]
+        else:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return response.content[0].text
 
     def summarize_articles(
         self, articles_metadata: List[Dict[str, Any]], max_articles: int = 50
@@ -65,15 +110,9 @@ Please provide:
 
 Keep the summary concise but informative (300-500 words)."""
 
-        # Call Claude
+        # Call LLM
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=2000,
-                messages=[{"role": "user", "content": prompt}],
-            )
-
-            summary = response.content[0].text
+            summary = self._call_llm(prompt, max_tokens=2000)
             logger.info("Generated corpus summary")
             return summary
 
@@ -115,13 +154,7 @@ List exactly {num_topics} distinct topics, one per line. Each topic should be a 
 Format: Just list the topics, no numbering or bullet points."""
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=500,
-                messages=[{"role": "user", "content": prompt}],
-            )
-
-            topics_text = response.content[0].text
+            topics_text = self._call_llm(prompt, max_tokens=500)
             topics = [
                 line.strip()
                 for line in topics_text.split("\n")
@@ -148,14 +181,15 @@ Format: Just list the topics, no numbering or bullet points."""
         Returns:
             Dictionary mapping keywords to frequency counts
         """
-        from collections import Counter
-
         # Collect all keywords from metadata
         all_keywords = []
 
         for article in articles_metadata:
             keywords = article.get("keywords", [])
             if keywords:
+                if isinstance(keywords, str):
+                    # Handle comma-separated string
+                    keywords = [kw.strip() for kw in keywords.split(",")]
                 all_keywords.extend([kw.lower().strip() for kw in keywords])
 
         # Count frequencies
@@ -179,9 +213,6 @@ Format: Just list the topics, no numbering or bullet points."""
         Returns:
             Dictionary with trend analysis
         """
-        from collections import defaultdict
-        from datetime import datetime
-
         # Group by year and month
         by_year = defaultdict(int)
         by_month = defaultdict(int)
@@ -219,7 +250,7 @@ Format: Just list the topics, no numbering or bullet points."""
 
         for i, article in enumerate(articles, 1):
             title = article.get("title", "Unknown")
-            authors = ", ".join(article.get("authors", [])[:3])
+            authors = ", ".join(article.get("authors", [])[:3]) if isinstance(article.get("authors"), list) else article.get("authors", "Unknown")
             date = article.get("publication_date", "Unknown date")
             abstract = article.get("abstract", "")[:200]  # Truncate
 

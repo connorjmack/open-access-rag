@@ -1,10 +1,9 @@
 """
-Chat interface for RAG system using Claude.
+Chat interface for RAG system using Claude or Ollama.
 """
 
 from typing import List, Dict, Any, Optional
 
-import anthropic
 from loguru import logger
 
 from src.rag.retriever import Retriever
@@ -19,24 +18,47 @@ class RAGChat:
         retriever: Optional[Retriever] = None,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
+        use_ollama: Optional[bool] = None,
     ):
         """
         Initialize RAG chat.
 
         Args:
             retriever: Retriever instance (creates new if None)
-            api_key: Anthropic API key (defaults to settings)
-            model: Claude model to use (defaults to settings)
+            api_key: Anthropic API key (optional if using Ollama)
+            model: Model to use (defaults to settings)
+            use_ollama: Force Ollama usage. If None, auto-detects based on API key
         """
         self.retriever = retriever or Retriever()
-        self.api_key = api_key or settings.anthropic_api_key
-        self.model = model or settings.llm_model
-        self.client = anthropic.Anthropic(api_key=self.api_key)
+
+        # Determine whether to use Ollama or Anthropic
+        if use_ollama is None:
+            # Auto-detect: use Ollama if no API key is available
+            self.use_ollama = not hasattr(settings, 'anthropic_api_key') or not settings.anthropic_api_key
+        else:
+            self.use_ollama = use_ollama
+
+        if self.use_ollama:
+            # Use Ollama (free, local)
+            import ollama
+
+            self.model = model or getattr(settings, 'ollama_model', 'llama3.1')
+            self.client = ollama
+            self.api_key = None
+
+            logger.info(f"Initialized RAGChat with OLLAMA model: {self.model}")
+        else:
+            # Use Anthropic Claude
+            import anthropic
+
+            self.api_key = api_key or settings.anthropic_api_key
+            self.model = model or settings.llm_model
+            self.client = anthropic.Anthropic(api_key=self.api_key)
+
+            logger.info(f"Initialized RAGChat with CLAUDE model: {self.model}")
 
         # Conversation history
         self.conversation_history: List[Dict[str, str]] = []
-
-        logger.info(f"Initialized RAGChat with model: {self.model}")
 
     def chat(
         self,
@@ -79,17 +101,16 @@ class RAGChat:
         system_prompt = self._build_system_prompt()
         user_message = self._build_user_message(query, context)
 
-        # Call Claude
+        # Call LLM
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=max_tokens or settings.max_tokens,
-                temperature=temperature or settings.llm_temperature,
-                system=system_prompt,
-                messages=self.conversation_history + [{"role": "user", "content": user_message}],
-            )
-
-            answer = response.content[0].text
+            if self.use_ollama:
+                answer = self._call_ollama(
+                    system_prompt, user_message, temperature, max_tokens
+                )
+            else:
+                answer = self._call_anthropic(
+                    system_prompt, user_message, temperature, max_tokens
+                )
 
             # Extract source information
             sources = self._extract_sources(documents)
@@ -114,6 +135,51 @@ class RAGChat:
                 "sources": [],
                 "num_sources": 0,
             }
+
+    def _call_ollama(
+        self,
+        system_prompt: str,
+        user_message: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> str:
+        """Call Ollama API."""
+        messages = self.conversation_history + [{"role": "user", "content": user_message}]
+
+        # Add system message at the beginning
+        full_messages = [{"role": "system", "content": system_prompt}] + messages
+
+        options = {}
+        if temperature is not None:
+            options["temperature"] = temperature
+        if max_tokens is not None:
+            options["num_predict"] = max_tokens
+
+        response = self.client.chat(
+            model=self.model,
+            messages=full_messages,
+            options=options if options else None,
+        )
+
+        return response['message']['content']
+
+    def _call_anthropic(
+        self,
+        system_prompt: str,
+        user_message: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> str:
+        """Call Anthropic Claude API."""
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=max_tokens or settings.max_tokens,
+            temperature=temperature or settings.llm_temperature,
+            system=system_prompt,
+            messages=self.conversation_history + [{"role": "user", "content": user_message}],
+        )
+
+        return response.content[0].text
 
     def chat_stream(
         self,
@@ -152,20 +218,43 @@ class RAGChat:
         system_prompt = self._build_system_prompt()
         user_message = self._build_user_message(query, context)
 
-        # Call Claude with streaming
+        # Call LLM with streaming
         try:
             full_response = ""
 
-            with self.client.messages.stream(
-                model=self.model,
-                max_tokens=max_tokens or settings.max_tokens,
-                temperature=temperature or settings.llm_temperature,
-                system=system_prompt,
-                messages=self.conversation_history + [{"role": "user", "content": user_message}],
-            ) as stream:
-                for text in stream.text_stream:
+            if self.use_ollama:
+                # Ollama streaming
+                messages = self.conversation_history + [{"role": "user", "content": user_message}]
+                full_messages = [{"role": "system", "content": system_prompt}] + messages
+
+                options = {}
+                if temperature is not None:
+                    options["temperature"] = temperature
+
+                stream = self.client.chat(
+                    model=self.model,
+                    messages=full_messages,
+                    stream=True,
+                    options=options if options else None,
+                )
+
+                for chunk in stream:
+                    text = chunk['message']['content']
                     full_response += text
                     yield text
+
+            else:
+                # Anthropic streaming
+                with self.client.messages.stream(
+                    model=self.model,
+                    max_tokens=max_tokens or settings.max_tokens,
+                    temperature=temperature or settings.llm_temperature,
+                    system=system_prompt,
+                    messages=self.conversation_history + [{"role": "user", "content": user_message}],
+                ) as stream:
+                    for text in stream.text_stream:
+                        full_response += text
+                        yield text
 
             # Update conversation history
             self.conversation_history.append({"role": "user", "content": query})
@@ -185,7 +274,7 @@ class RAGChat:
         return self.conversation_history.copy()
 
     def _build_system_prompt(self) -> str:
-        """Build system prompt for Claude."""
+        """Build system prompt for the LLM."""
         return """You are a helpful research assistant analyzing academic articles about climate science and environmental research.
 
 Your role is to:

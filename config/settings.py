@@ -20,9 +20,13 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # API Keys (Required)
-    anthropic_api_key: str = Field(..., description="Anthropic API key for Claude")
-    voyage_api_key: str = Field(..., description="Voyage AI API key for embeddings")
+    # API Keys (all optional - uses free local alternatives if not provided)
+    anthropic_api_key: Optional[str] = Field(
+        default=None, description="Anthropic API key for Claude (optional, uses Ollama if not provided)"
+    )
+    voyage_api_key: Optional[str] = Field(
+        default=None, description="Voyage AI API key for embeddings (optional, uses local if not provided)"
+    )
 
     # Journal Configuration
     num_issues: int = Field(default=10, description="Number of recent issues to fetch")
@@ -52,6 +56,9 @@ class Settings(BaseSettings):
     # LLM Configuration
     llm_model: str = Field(
         default="claude-3-5-haiku-20241022", description="Claude model for chat"
+    )
+    ollama_model: str = Field(
+        default="llama3.1", description="Ollama model for chat (used when anthropic_api_key is not set)"
     )
     llm_temperature: float = Field(
         default=0.7, ge=0.0, le=1.0, description="Temperature for LLM generation"

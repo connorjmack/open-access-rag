@@ -35,35 +35,31 @@ class PLOSScraper(BaseScraper):
         """
         Fetch a list of recent issues.
 
-        For PLOS, we'll fetch from the browse page.
+        For PLOS Climate, we fetch from the homepage which shows recent articles.
 
         Args:
-            num_issues: Number of recent issues to fetch
+            num_issues: Number of recent issues to fetch (not used, returns homepage)
 
         Returns:
             List of issue dictionaries
         """
-        # PLOS doesn't have traditional issues, so we'll fetch from browse/recent
-        browse_url = f"{self.base_url}/browse"
+        # PLOS Climate shows recent articles on the homepage
+        homepage_url = f"{self.base_url}/"
 
-        logger.info(f"Fetching issue list from {browse_url}")
+        logger.info(f"Fetching articles from {homepage_url}")
 
         try:
-            response = self._make_request(browse_url)
-            soup = self._parse_html(response.text)
-
-            # For PLOS, we'll treat the browse page as one "issue"
-            # and just return a reference to fetch recent articles
+            # For PLOS Climate, we'll treat the homepage as one "issue"
             return [
                 {
-                    "url": browse_url,
+                    "url": homepage_url,
                     "date": datetime.now().isoformat(),
                     "title": "Recent Articles",
                 }
             ]
 
         except Exception as e:
-            logger.error(f"Failed to fetch issue list: {e}")
+            logger.error(f"Failed to create issue list: {e}")
             return []
 
     def fetch_article_list(self, issue_url: str) -> List[str]:
