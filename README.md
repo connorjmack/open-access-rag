@@ -1,0 +1,1 @@
+takes a url to an open access journal, reads the most recent X issues and uses RAG tools to create a summary, plots of topics over time, keywords, trends in publications and a chatteable LLM that knows the whole data base
