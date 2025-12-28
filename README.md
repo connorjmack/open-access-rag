@@ -1,59 +1,57 @@
 # Open Access RAG System
 
-A professional-grade Retrieval-Augmented Generation (RAG) system for analyzing open access academic journals. The system fetches articles, generates embeddings, and provides an interactive chat interface to query the corpus along with comprehensive visualizations and analytics.
+A RAG (Retrieval-Augmented Generation) system for exploring open access academic journals. Scrapes articles, builds a searchable vector database, and lets you chat with the corpus - all running locally and completely free.
 
-## Features
+## What it does
 
-- **Automated Article Fetching**: Scrape and download articles from open access journals (starting with PLOS Climate)
-- **Semantic Search**: Vector-based search using ChromaDB for efficient retrieval
-- **Intelligent Chat Interface**: Query the corpus using Claude AI with contextual responses
-- **Visual Analytics**:
-  - Topics over time visualization
-  - Keyword trend analysis
-  - Publication trend charts
-  - Corpus summary statistics
-- **Modular Architecture**: Extensible design supporting multiple journal sources
-- **Web-Based Dashboard**: Interactive Streamlit interface for exploration and analysis
+- Fetches articles from open access journals (currently supports PLOS Climate)
+- Generates embeddings and stores them in a local vector database
+- Provides a web interface where you can ask questions about the research
+- Shows visualizations like topic trends over time and keyword analysis
+- Actually cites its sources instead of making stuff up
 
 ## Tech Stack
 
-- **LLM**: Claude 3.5 Haiku (via Anthropic API)
-- **Embeddings**: Voyage AI
-- **Vector Database**: ChromaDB (local-first, persistent storage)
-- **UI Framework**: Streamlit
+Everything runs locally on your machine:
+
+- **LLM**: Ollama (llama3.1, mistral, or whatever model you prefer)
+- **Embeddings**: sentence-transformers (all-MiniLM-L6-v2)
+- **Vector Database**: ChromaDB
+- **Web UI**: Streamlit
 - **Language**: Python 3.10+
+
+No API keys required. No usage costs. Just install and run.
 
 ## Project Structure
 
 ```
 open-access-rag/
-├── config/              # Configuration management
+├── config/              # Configuration
 ├── src/
-│   ├── scraper/        # Article fetching and parsing
+│   ├── scraper/        # Article fetching
 │   ├── processor/      # Text processing and embeddings
 │   ├── storage/        # Vector database interface
 │   ├── analysis/       # Analytics and visualizations
 │   ├── rag/           # RAG pipeline and chat
-│   └── ui/            # Streamlit web application
+│   └── ui/            # Streamlit app
 ├── scripts/           # CLI utilities
 ├── data/             # Data storage (gitignored)
 │   ├── raw/          # Raw article data
 │   ├── processed/    # Processed articles
 │   └── vectorstore/  # ChromaDB storage
-└── tests/            # Unit tests
+└── tests/            # Tests
 ```
 
 ## Installation
 
-### Prerequisites
+### What you need
 
 - Python 3.10 or higher
-- Anthropic API key (for Claude)
-- Voyage AI API key (for embeddings)
+- Ollama installed and running ([get it here](https://ollama.ai))
 
 ### Setup
 
-1. Clone the repository:
+1. Clone the repo:
 ```bash
 git clone https://github.com/yourusername/open-access-rag.git
 cd open-access-rag
@@ -70,138 +68,135 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Configure environment variables:
+4. Pull an Ollama model (if you haven't already):
 ```bash
-cp .env.example .env
-# Edit .env and add your API keys
+ollama pull llama3.1
 ```
 
-## Configuration
+That's it. No API keys needed.
 
-Create a `.env` file in the project root with the following variables:
+### Optional: Using paid APIs instead
+
+If you want to use Claude and Voyage AI instead of the free local models, you can create a `.env` file:
 
 ```env
-# Required API Keys
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-VOYAGE_API_KEY=your_voyage_api_key_here
-
-# Optional Configuration
-NUM_ISSUES=10                    # Number of recent issues to fetch
-CHUNK_SIZE=1024                  # Token size for text chunks
-CHUNK_OVERLAP=100                # Overlap between chunks
-EMBEDDING_MODEL=voyage-2         # Voyage AI model
-LLM_MODEL=claude-3-5-haiku-20241022  # Claude model
+ANTHROPIC_API_KEY=your_key_here
+VOYAGE_API_KEY=your_key_here
 ```
+
+The system will automatically detect the keys and use the paid services. But honestly, the free local setup works fine for most use cases.
 
 ## Usage
 
-### 1. Fetch Articles
-
-Use the CLI script to download articles from a journal:
+### 1. Fetch some articles
 
 ```bash
 python scripts/fetch_articles.py --journal plos-climate --num-issues 10
 ```
 
-### 2. Process and Embed
+This grabs the most recent 10 issues from PLOS Climate. Takes a few minutes depending on your connection.
 
-Process the downloaded articles and generate embeddings:
+### 2. Process and embed them
 
 ```bash
 python scripts/process_corpus.py
 ```
 
-### 3. Launch the Dashboard
+This chunks the articles, generates embeddings, and stores everything in ChromaDB. The first run downloads the embedding model (about 80MB), then subsequent runs are quick.
 
-Start the Streamlit web interface:
+### 3. Start the web interface
 
 ```bash
 streamlit run src/ui/app.py
 ```
 
-The dashboard will open in your browser at `http://localhost:8501`
+Opens at `http://localhost:8501`
 
-## Dashboard Features
+## What you can do in the dashboard
 
-### Overview Tab
-- Corpus statistics (number of articles, date range, etc.)
-- Summary of main topics and themes
-- Recent publications
+**Overview tab** - Shows stats about your corpus, main topics, recent publications
 
-### Visualizations Tab
-- **Topics Over Time**: Track how research topics evolve
-- **Keyword Trends**: Identify trending keywords and concepts
-- **Publication Trends**: Analyze publication frequency and patterns
+**Visualizations tab** - Charts showing how topics and keywords change over time, publication trends
 
-### Chat Tab
-- Interactive Q&A with the corpus
-- Context-aware responses powered by Claude
-- Source citations for transparency
+**Chat tab** - Ask questions about the research. It'll retrieve relevant passages and generate answers with citations. Try things like:
+- "What are the main challenges in climate modeling?"
+- "Summarize recent findings on ocean acidification"
+- "What methods are used to measure carbon sequestration?"
 
-## Development
+## Configuration
 
-### Project Architecture
+You can tweak settings by creating a `.env` file. Here are some useful options:
 
-The system follows a modular pipeline architecture:
+```env
+# Ollama Configuration
+OLLAMA_MODEL=llama3.1  # or mistral, phi3, dolphin-mixtral, etc.
 
-1. **Scraper**: Fetches article metadata and full text from journals
-2. **Processor**: Cleans text, chunks documents, and generates embeddings
-3. **Storage**: Manages vector database operations (store, retrieve, search)
-4. **Analysis**: Generates summaries, extracts topics, creates visualizations
-5. **RAG**: Implements retrieval and chat functionality
-6. **UI**: Provides user interface for interaction
+# Processing
+CHUNK_SIZE=1024
+CHUNK_OVERLAP=100
 
-### Adding a New Journal Source
+# How many articles to retrieve for each query
+RETRIEVAL_TOP_K=5
+```
 
-To support a new journal:
+See `.env.example` for all available settings.
 
-1. Create a new scraper in `src/scraper/` that inherits from `BaseScraper`
-2. Implement required methods:
-   - `fetch_issue_list()`
-   - `fetch_article_metadata()`
-   - `fetch_article_fulltext()`
-3. Register the scraper in the configuration
+## Adding more journal sources
 
-## API Keys
+Right now it only supports PLOS Climate, but it's built to be extensible. To add a new journal:
 
-### Anthropic API
-Get your API key from [Anthropic Console](https://console.anthropic.com/)
+1. Create a new scraper class in `src/scraper/` that inherits from `BaseScraper`
+2. Implement the required methods:
+   - `fetch_issue_list()` - Get list of issues
+   - `fetch_article_metadata()` - Get article info
+   - `fetch_article_fulltext()` - Get full article text
+3. Register it in the config
 
-### Voyage AI
-Sign up at [Voyage AI](https://www.voyageai.com/) for embedding API access
+The scraper handles different HTML structures, paywalls (or lack thereof), and weird formatting quirks that each journal has.
 
-## Cost Estimates
+## Performance
 
-Based on analyzing 10 issues (~100-200 articles):
+On a typical laptop:
+- Fetching 10 issues (100-200 articles): 5-10 minutes
+- Processing and embedding: 2-5 minutes
+- Chat queries: 2-5 seconds per response
 
-- **Embeddings** (Voyage AI): ~$0.10-0.30
-- **Chat** (Claude 3.5 Haiku): ~$0.05-0.15 per session
-- **Total**: < $1 for initial corpus processing
+The local embedding model is fast. Ollama response time depends on your hardware - decent on M1/M2 Macs, slower on older CPUs, fast on machines with GPUs.
+
+## Why local/free?
+
+Most RAG tutorials show you how to rack up API costs. This runs entirely on your machine:
+- No API rate limits
+- No usage costs
+- No data leaving your computer
+- No internet required after initial setup
+
+The quality is good enough for research exploration, summarization, and learning how RAG systems work.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - do whatever you want with it.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Pull requests welcome. If you add support for another journal, definitely submit it.
 
-## Roadmap
+## What's next
 
-- [ ] Support for additional journals (PubMed, arXiv, etc.)
-- [ ] Advanced topic modeling with BERTopic
-- [ ] Export functionality (PDF reports, CSV data)
-- [ ] Multi-language support
-- [ ] Caching and incremental updates
-- [ ] User authentication and saved sessions
+Some things that would be cool to add:
+- More journals (PubMed, arXiv, bioRxiv, etc.)
+- Better topic modeling
+- Export functionality
+- Incremental updates instead of reprocessing everything
+- Multi-language support
 
-## Acknowledgments
+## Built with
 
-- Built with [Claude](https://www.anthropic.com/claude) by Anthropic
-- Embeddings powered by [Voyage AI](https://www.voyageai.com/)
-- Vector storage by [ChromaDB](https://www.trychroma.com/)
-- UI framework by [Streamlit](https://streamlit.io/)
+- [Ollama](https://ollama.ai) - Local LLM runtime
+- [sentence-transformers](https://www.sbert.net/) - Embedding models
+- [ChromaDB](https://www.trychroma.com/) - Vector database
+- [Streamlit](https://streamlit.io/) - Web framework
 
-## Support
+## Questions?
 
-For issues and questions, please open an issue on GitHub or contact the maintainers.
+Open an issue if something's broken or confusing.
